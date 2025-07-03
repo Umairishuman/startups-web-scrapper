@@ -10,7 +10,7 @@ from selenium.webdriver.common.by import By
 # === Configuration ===
 INPUT_FILE = "indiResults.json"
 OUTPUT_FILE = "email_scraped.json"
-NUM_TO_SCRAPE = 10
+NUM_TO_SCRAPE = 630
 
 chrome_driver_path = "/home/muhammad-umair/Desktop/Selenium Drivers/chromedriver"
 service = Service(executable_path=chrome_driver_path)
