@@ -31,7 +31,7 @@ driver = launch_browser()
 wait = WebDriverWait(driver, 10)
 
 # ---------- Load URL List ----------
-with open('results2.json', 'r') as file:
+with open('URLs.json', 'r') as file:
     all_urls = json.load(file)
 
 all_urls = all_urls[START_INDEX:]

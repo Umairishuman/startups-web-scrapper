@@ -106,11 +106,11 @@ while len(all_data) < max_entries:
 
 # Save results to a JSON file
 try:
-    with open("results2.json", "w", encoding="utf-8") as file:
+    with open("URLs.json", "w", encoding="utf-8") as file:
         json.dump(all_data, file, indent=4, ensure_ascii=False)
-    print(f"Scraped data saved to 'results2.json'. Total entries: {len(all_data)}")
+    print(f"Scraped data saved to 'URLs.json'. Total entries: {len(all_data)}")
 except Exception as e:
     print(f"Error saving data to file: {e}")
 
-# Close the browser
+# Close the browsers
 driver.quit()
