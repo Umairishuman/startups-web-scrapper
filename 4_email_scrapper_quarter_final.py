@@ -8,10 +8,10 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 
 # === Configuration ===
-INPUT_FILE = "indiResults.json"
-OUTPUT_FILE = "email_scraped_after_597.json"
-START_INDEX = 599              # Resume from a specific index
-NUM_TO_SCRAPE = None             # Limit or None for all from START_INDEX
+INPUT_FILE = "indiResults2.json"
+OUTPUT_FILE = "email_scraped_after_2_8.json"
+START_INDEX = 1152
+NUM_TO_SCRAPE = None
 chrome_driver_path = "/home/muhammad-umair/Desktop/Selenium Drivers/chromedriver"
 
 email_regex = r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"
@@ -20,17 +20,17 @@ email_regex = r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"
 with open(INPUT_FILE, "r") as f:
     projects = json.load(f)
 
-# === Determine range ===
 total_projects = len(projects)
 end_index = total_projects if NUM_TO_SCRAPE is None else min(START_INDEX + NUM_TO_SCRAPE, total_projects)
 
 processed_projects = []
+captcha_retry_counter = {}
 
 # === Chrome Setup Function ===
 def launch_driver():
     service = Service(executable_path=chrome_driver_path)
     options = webdriver.ChromeOptions()
-    # options.add_argument("--headless=new")  # Optional: enable after login
+    options.add_argument("--headless=new")  # Uncomment to run headless
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--start-maximized")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -95,13 +95,20 @@ try:
 
             if (current_index + 1) % 10 == 0:
                 print("⏳ Cooling down...")
-                time.sleep(5)
+                time.sleep(2)
 
         except Exception as e:
             if "Captcha Detected" in str(e):
-                print(f"🛑 CAPTCHA detected at index {current_index}. Restarting driver after delay...")
+                captcha_retry_counter[current_index] = captcha_retry_counter.get(current_index, 0) + 1
+                if captcha_retry_counter[current_index] >= 3:
+                    print(f"❌ Skipping index {current_index} after 3 CAPTCHA attempts.")
+                    project["emails"] = ["Error: CAPTCHA detected 3 times"]
+                    processed_projects.append(project)
+                    current_index += 1
+                    continue
+                print(f"🛑 CAPTCHA detected at index {current_index} (Attempt {captcha_retry_counter[current_index]}). Restarting driver...")
                 driver.quit()
-                time.sleep(random.randint(5, 10))  # Cooldown before retrying
+                # time.sleep(random.randint(5, 10))
                 driver = launch_driver()
                 continue
             else:

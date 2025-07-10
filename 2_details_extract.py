@@ -11,12 +11,13 @@ import os
 
 # ---------- Configurable ----------
 CHROMEDRIVER_PATH = '/home/muhammad-umair/Desktop/Selenium Drivers/chromedriver'
-START_INDEX = 31
-MAX_LIMIT = 700  # or set to an integer like 50
+MAX_LIMIT = None  # or set to None for no limit
+DATA_FILE = 'indiResults2.json'
+URLS_FILE = 'URLs.json'
 
 # ---------- Chrome Options ----------
 options = Options()
-# options.add_argument('--headless=new')  # Uncomment for headless
+# options.add_argument('--headless=new')  # Uncomment to run headless
 options.add_argument('--disable-gpu')
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
@@ -30,36 +31,35 @@ def launch_browser():
 driver = launch_browser()
 wait = WebDriverWait(driver, 10)
 
-# ---------- Load URL List ----------
-with open('URLs.json', 'r') as file:
+# ---------- Load All URLs ----------
+with open(URLS_FILE, 'r') as file:
     all_urls = json.load(file)
 
-all_urls = all_urls[START_INDEX:]
-
-if MAX_LIMIT is not None:
-    all_urls = all_urls[:MAX_LIMIT]
-
-# ---------- Load existing results ----------
+# ---------- Load Existing Results ----------
 results = []
 existing_urls = set()
-if os.path.exists('indiResults.json'):
-    with open('indiResults.json', 'r') as file:
+if os.path.exists(DATA_FILE):
+    with open(DATA_FILE, 'r') as file:
         try:
             results = json.load(file)
             existing_urls = set(item['url'] for item in results)
-            print(f"Loaded {len(results)} existing logs.")
+            print(f"✅ Loaded {len(results)} existing entries from '{DATA_FILE}'")
         except json.JSONDecodeError:
-            print("⚠️ Warning: indiResults.json is corrupted or empty. Starting fresh.")
+            print("⚠️ Warning: Data file is corrupted or empty. Starting fresh.")
 
-urls = [url for url in all_urls if url not in existing_urls]
-print(f"🔁 Starting from index {START_INDEX}. Scraping up to {len(urls)} URLs.\n")
+# ---------- Filter Remaining URLs ----------
+urls_to_scrape = [url for url in all_urls if url not in existing_urls]
+if MAX_LIMIT:
+    urls_to_scrape = urls_to_scrape[:MAX_LIMIT]
+
+print(f"🔁 Resuming scraping from index {len(existing_urls)}. Remaining: {len(urls_to_scrape)} URLs\n")
 
 # ---------- Main Loop ----------
 new_results = []
 
 try:
-    for index, url in enumerate(urls):
-        global_index = START_INDEX + index
+    for index, url in enumerate(urls_to_scrape):
+        global_index = len(existing_urls) + index
         print(f"\n[{global_index}] Loading: {url}")
 
         if index > 0 and index % 15 == 0:
@@ -80,7 +80,7 @@ try:
             driver.get(url)
         except Exception as e:
             print(f"❌ Error loading URL: {e}")
-            new_results.append({
+            data = {
                 "url": url,
                 "title": "Timeout",
                 "description": "Timeout",
@@ -88,8 +88,9 @@ try:
                 "allParagraphs": [],
                 "social_links": [],
                 "company_links": []
-            })
-            continue
+            }
+            results.append(data)
+            continue  # Move to next URL
 
         try:
             title_element = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "basicsSection-title")))
@@ -97,22 +98,21 @@ try:
 
             description_element = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "basicsSection-tagline")))
             description = driver.execute_script("return arguments[0].innerText;", description_element).strip()
+            founder = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "campaignOwnerName-tooltip"))).text.strip()
 
-            founder_element = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "campaignOwnerName-tooltip")))
-            company_name = founder_element.text.strip()
-
-            # Hover over the founder element
-            ActionChains(driver).move_to_element(founder_element).perform()
-            time.sleep(1.5)  # Allow tooltip to appear
+            ActionChains(driver).move_to_element(
+                driver.find_element(By.CLASS_NAME, "campaignOwnerName-tooltip")
+            ).perform()
+            time.sleep(1.5)
 
             social_links_set = set()
             company_links_set = set()
 
             try:
-                tooltip_element = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "tooltipHover-transition")))
-                anchor_tags = tooltip_element.find_elements(By.TAG_NAME, "a")
+                tooltip = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "tooltipHover-transition")))
+                anchors = tooltip.find_elements(By.TAG_NAME, "a")
 
-                for a in anchor_tags:
+                for a in anchors:
                     href = a.get_attribute("href")
                     if not href:
                         continue
@@ -125,24 +125,22 @@ try:
             except Exception as tooltip_err:
                 print(f"⚠️ Tooltip scraping failed: {tooltip_err}")
 
-            paragraph_elements = driver.find_elements(By.TAG_NAME, "p")
-            all_paragraphs = [p.text.strip() for p in paragraph_elements if p.text.strip() != ""]
-
-            new_results.append({
+            paragraphs = [p.text.strip() for p in driver.find_elements(By.TAG_NAME, "p") if p.text.strip()]
+            data = {
                 "url": url,
                 "title": title,
                 "description": description,
-                "company_name": company_name,
-                "allParagraphs": all_paragraphs,
+                "company_name": founder,
+                "allParagraphs": paragraphs,
                 "social_links": list(social_links_set),
                 "company_links": list(company_links_set)
-            })
+            }
 
-            print(f"✅ Scraped: {title} | paragraphs: {len(all_paragraphs)} | social: {len(social_links_set)} | company: {len(company_links_set)}")
+            print(f"✅ Scraped: {title} | paragraphs: {len(paragraphs)} | social: {len(social_links_set)} | company: {len(company_links_set)}")
 
         except Exception as e:
-            print(f"⚠️ Extraction error for {url}: {e}")
-            new_results.append({
+            print(f"⚠️ Extraction error: {e}")
+            data = {
                 "url": url,
                 "title": "Failed",
                 "description": "Failed",
@@ -150,7 +148,13 @@ try:
                 "allParagraphs": [],
                 "social_links": [],
                 "company_links": []
-            })
+            }
+
+        results.append(data)
+
+        # 🧷 Save after every URL
+        with open(DATA_FILE, 'w') as f:
+            json.dump(results, f, indent=4)
 
 except KeyboardInterrupt:
     print("\n🛑 Interrupted. Saving progress...")
@@ -159,8 +163,5 @@ except Exception as e:
     print(f"\n🔥 Unexpected error: {e}")
 
 finally:
-    combined_results = results + new_results
-    with open('indiResults.json', 'w') as file:
-        json.dump(combined_results, file, indent=4)
     driver.quit()
-    print(f"\n✅ Appended {len(new_results)} new entries. Total: {len(combined_results)}. Saved to indiResults.json.")
+    print(f"\n✅ Scraping complete. Total saved: {len(results)} → {DATA_FILE}")
